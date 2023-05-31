@@ -4,19 +4,19 @@ busmirroring_protocol = Proto("BusMirroring", "Bus Mirroring Protocol")
 
 protocol_version = ProtoField.uint8("busmirroring.protocol_version", "Protocol Version", base.DEC)
 sequence_number = ProtoField.uint8("busmirroring.sequence_number", "Sequence Number", base.DEC)
-header_timestamp = ProtoField.bytes("busmirroring.header_timestamp", "Timestamp")
+header_timestamp = ProtoField.absolute_time("busmirroring.header_timestamp", "Timestamp", base.UTC)
 seconds = ProtoField.uint64("busmirroring.seconds", "Seconds", base.DEC)
 nanoseconds = ProtoField.uint32("busmirroring.nanoseconds", "Nanoseconds", base.DEC)
 data_length = ProtoField.uint16("busmirroring.data_length", "Data Length", base.DEC)
-timestamp = ProtoField.uint16("busmirroring.timestamp", "Timestamp", base.DEC)
+timestamp = ProtoField.uint16("busmirroring.timestamp", "Timestamp(10 µs)", base.DEC)
 network_state_available = ProtoField.bool("busmirroring.network_state_available", "Network State", 8,
     {"Available", "Not Available"}, 0x80)
 frame_id_available = ProtoField.bool("busmirroring.frame_id_available", "Frame ID", 8, {"Available", "Not Available"},
     0x40)
 payload_available =
     ProtoField.bool("busmirroring.payload_available", "Payload", 8, {"Available", "Not Available"}, 0x20)
-network_type = ProtoField.uint8("busmirroring.network_type", "Network Type", base.RANGE_STRING,
-    {{1, 1, "CAN"}, {2, 2, "LIN"}, {3, 3, "FlexRay"}, {4, 4, "Ethernet"}}, 0x1F)
+network_type = ProtoField.uint8("busmirroring.network_type", "Network Type", base.DEC,
+    {"CAN", "LIN", "FlexRay", "Ethernet"}, 0x1F)
 network_id = ProtoField.uint8("busmirroring.network_id", "Network ID", base.DEC)
 network_state = ProtoField.uint8("busmirroring.network_state", "Network State", base.DEC)
 frame_id = ProtoField.uint32("busmirroring.frame_id", "Frame ID", base.HEX)
@@ -44,7 +44,8 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
     local subtree = tree:add(busmirroring_protocol, buffer(), "Bus Mirroring Protocol")
     subtree:add(protocol_version, buffer(0, 1))
     subtree:add(sequence_number, buffer(1, 1))
-    local header_timestamp_tree = subtree:add(header_timestamp, buffer(2, 10))
+    local header_timestamp_tree = subtree:add(header_timestamp, buffer(2, 10),
+        NSTime(buffer(2, 6):uint64():tonumber(), buffer(8, 4):uint()))
     header_timestamp_tree:add(seconds, buffer(2, 6))
     header_timestamp_tree:add(nanoseconds, buffer(8, 4))
     subtree:add(data_length, buffer(12, 2))
@@ -54,11 +55,11 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
     while offset < buffer_length do
         local data_length = 4
         local type = bit32.band(buffer:range(offset + 2, 1):uint(), 0x1F)
-        local has_network_state = bit32.band(buffer:range(offset + 2, 1):uint(), 0x80) == 0x80
+        local has_network_state = bit32.btest(buffer:range(offset + 2, 1):uint(), 0x80)
         if has_network_state then
             data_length = data_length + 1
         end
-        local has_frame_id = bit32.band(buffer:range(offset + 2, 1):uint(), 0x40) == 0x40
+        local has_frame_id = bit32.btest(buffer:range(offset + 2, 1):uint(), 0x40)
         if has_frame_id then
             local frame_id_length = 0
             if type == 0x01 then -- CAN
@@ -70,7 +71,7 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
             end
             data_length = data_length + frame_id_length
         end
-        local has_payload = bit32.band(buffer(offset + 2, 1):uint(), 0x20) == 0x20
+        local has_payload = bit32.btest(buffer(offset + 2, 1):uint(), 0x20)
         local length = 0
         if has_payload then
             length = buffer:range(offset + data_length, 1):uint()
