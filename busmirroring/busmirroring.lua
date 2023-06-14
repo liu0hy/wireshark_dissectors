@@ -20,8 +20,8 @@ network_type = ProtoField.uint8("busmirroring.network_type", "Network Type", bas
 network_id = ProtoField.uint8("busmirroring.network_id", "Network ID", base.DEC)
 network_state = ProtoField.uint8("busmirroring.network_state", "Network State", base.DEC)
 frame_id = ProtoField.uint32("busmirroring.frame_id", "Frame ID", base.HEX)
-can_id_format = ProtoField.bool("busmirroring.can_id_format", "CAN ID Format", 32, {"Ext.ID", "Std.ID"}, 0x80000000)
-can_frame_type = ProtoField.bool("busmirroring.can_frame_type", "Type", 32, {"FD", "2.0"}, 0x40000000)
+can_id_format = ProtoField.bool("busmirroring.can_id_format", "CAN ID Type", 32, {"Extended", "Standard"}, 0x80000000)
+can_frame_type = ProtoField.bool("busmirroring.can_frame_type", "CAN Frame Type", 32, {"CAN FD", "CAN 2.0"}, 0x40000000)
 can_id = ProtoField.uint32("busmirroring.can_id", "CAN ID", base.HEX_DEC, nil, 0x1FFFFFFF)
 lin_pid = ProtoField.uint8("busmirroring.lin_pid", "LIN PID", base.HEX_DEC)
 payload_length = ProtoField.uint8("busmirroring.payload_length", "Payload Length", base.DEC)
@@ -54,12 +54,13 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
     local offset = 14
     while offset < buffer_length do
         local data_length = 4
-        local type = bit32.band(buffer:range(offset + 2, 1):uint(), 0x1F)
-        local has_network_state = bit32.btest(buffer:range(offset + 2, 1):uint(), 0x80)
+        local flags = buffer:range(offset + 2, 1):uint()
+        local type = bit32.band(flags, 0x1F)
+        local has_network_state = bit32.btest(flags, 0x80)
         if has_network_state then
             data_length = data_length + 1
         end
-        local has_frame_id = bit32.btest(buffer:range(offset + 2, 1):uint(), 0x40)
+        local has_frame_id = bit32.btest(flags, 0x40)
         if has_frame_id then
             local frame_id_length = 0
             if type == 0x01 then -- CAN
@@ -71,7 +72,7 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
             end
             data_length = data_length + frame_id_length
         end
-        local has_payload = bit32.btest(buffer(offset + 2, 1):uint(), 0x20)
+        local has_payload = bit32.btest(flags, 0x20)
         local length = 0
         if has_payload then
             length = buffer:range(offset + data_length, 1):uint()
