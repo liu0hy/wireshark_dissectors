@@ -24,6 +24,15 @@ static int hf_network_state_available = -1;
 static int hf_frame_id_available = -1;
 static int hf_payload_available = -1;
 static int hf_network_type = -1;
+static int hf_frames_lost = -1;
+static int hf_bus_online = -1;
+static int hf_can_error_passive = -1;
+static int hf_can_bus_off = -1;
+static int hf_can_tx_error_count = -1;
+static int hf_lin_header_tx_error = -1;
+static int hf_lin_tx_error = -1;
+static int hf_lin_rx_error = -1;
+static int hf_lin_rx_no_response = -1;
 static int hf_network_id = -1;
 static int hf_network_state = -1;
 static int hf_frame_id = -1;
@@ -36,6 +45,7 @@ static int hf_payload = -1;
 static int ett_busmirroring = -1;
 static int ett_header_timestamp = -1;
 static int ett_data_item = -1;
+static int ett_network_state = -1;
 static int ett_frame_id = -1;
 
 static int
@@ -117,7 +127,30 @@ dissect_busmirroring(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, vo
         int local_offset = 4;
         if (has_network_state)
         {
-            proto_tree_add_item(data_item, hf_network_state, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+            proto_item *ns_item = proto_tree_add_item(data_item, hf_network_state, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+            proto_tree *ns_tree = proto_item_add_subtree(ns_item, ett_network_state);
+            proto_tree_add_item(ns_tree, hf_frames_lost, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_item(ns_tree, hf_bus_online, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+            switch (type)
+            {
+            case NETWORK_TYPE_CAN:
+            {
+                proto_tree_add_item(ns_tree, hf_can_error_passive, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item(ns_tree, hf_can_bus_off, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item(ns_tree, hf_can_tx_error_count, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+            }
+            break;
+            case NETWORK_TYPE_LIN:
+            {
+                proto_tree_add_item(ns_tree, hf_lin_header_tx_error, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item(ns_tree, hf_lin_tx_error, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item(ns_tree, hf_lin_rx_error, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_item(ns_tree, hf_lin_rx_no_response, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
+            }
+            break;
+            default:
+                break;
+            }
             local_offset += 1;
         }
         if (has_frame_id)
@@ -238,8 +271,53 @@ void proto_register_busmirroring(void)
           NULL, HFILL}},
         {&hf_network_state,
          {"Network State", "busmirroring.network_state",
-          FT_UINT8, BASE_DEC,
+          FT_UINT8, BASE_HEX,
           NULL, 0x0,
+          NULL, HFILL}},
+        {&hf_frames_lost,
+         {"Frames Lost", "busmirroring.frames_lost",
+          FT_BOOLEAN, 8,
+          NULL, 0x80,
+          NULL, HFILL}},
+        {&hf_bus_online,
+         {"Bus Online", "busmirroring.bus_online",
+          FT_BOOLEAN, 8,
+          NULL, 0x40,
+          NULL, HFILL}},
+        {&hf_can_error_passive,
+         {"Error-Passive", "busmirroring.can_error_passive",
+          FT_BOOLEAN, 8,
+          NULL, 0x20,
+          NULL, HFILL}},
+        {&hf_can_bus_off,
+         {"Bus-Off", "busmirroring.can_bus_off",
+          FT_BOOLEAN, 8,
+          NULL, 0x10,
+          NULL, HFILL}},
+        {&hf_can_tx_error_count,
+         {"Tx Error Count(divided by 8)", "busmirroring.can_tx_error_count",
+          FT_UINT8, BASE_DEC,
+          NULL, 0x0F,
+          NULL, HFILL}},
+        {&hf_lin_header_tx_error,
+         {"Header Tx Error", "busmirroring.lin_header_tx_error",
+          FT_BOOLEAN, 8,
+          NULL, 0x08,
+          NULL, HFILL}},
+        {&hf_lin_tx_error,
+         {"Tx Error", "busmirroring.lin_tx_error",
+          FT_BOOLEAN, 8,
+          NULL, 0x04,
+          NULL, HFILL}},
+        {&hf_lin_rx_error,
+         {"Rx Error", "busmirroring.lin_rx_error",
+          FT_BOOLEAN, 8,
+          NULL, 0x02,
+          NULL, HFILL}},
+        {&hf_lin_rx_no_response,
+         {"Rx No Response", "busmirroring.lin_rx_no_response",
+          FT_BOOLEAN, 8,
+          NULL, 0x01,
           NULL, HFILL}},
         {&hf_frame_id,
          {"Frame ID", "busmirroring.frame_id",
@@ -282,6 +360,7 @@ void proto_register_busmirroring(void)
         &ett_busmirroring,
         &ett_header_timestamp,
         &ett_data_item,
+        &ett_network_state,
         &ett_frame_id};
 
     proto_busmirroring = proto_register_protocol(
