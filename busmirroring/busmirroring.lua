@@ -18,7 +18,17 @@ payload_available =
 network_type = ProtoField.uint8("busmirroring.network_type", "Network Type", base.DEC,
     {"CAN", "LIN", "FlexRay", "Ethernet"}, 0x1F)
 network_id = ProtoField.uint8("busmirroring.network_id", "Network ID", base.DEC)
-network_state = ProtoField.uint8("busmirroring.network_state", "Network State", base.DEC)
+network_state = ProtoField.uint8("busmirroring.network_state", "Network State", base.HEX)
+frames_lost = ProtoField.bool("busmirroring.frames_lost", "Frames Lost", 8, nil, 0x80)
+bus_online = ProtoField.bool("busmirroring.bus_online", "Bus Online", 8, nil, 0x40)
+can_error_passive = ProtoField.bool("busmirroring.can_error_passive", "Error-Passive", 8, nil, 0x20)
+can_bus_off = ProtoField.bool("busmirroring.can_bus_off", "Bus-Off", 8, nil, 0x10)
+can_tx_error_count = ProtoField.uint8("busmirroring.can_tx_error_count", "Tx Error Count(divided by 8)", base.DEC, nil,
+    0x0F)
+lin_header_tx_error = ProtoField.bool("busmirroring.lin_header_tx_error", "Header Tx Error", 8, nil, 0x08)
+lin_tx_error = ProtoField.bool("busmirroring.lin_tx_error", "Tx Error", 8, nil, 0x04)
+lin_rx_error = ProtoField.bool("busmirroring.lin_rx_error", "Rx Error", 8, nil, 0x02)
+lin_rx_no_response = ProtoField.bool("busmirroring.lin_rx_no_response", "Rx No Response", 8, nil, 0x01)
 frame_id = ProtoField.uint32("busmirroring.frame_id", "Frame ID", base.HEX)
 can_id_format = ProtoField.bool("busmirroring.can_id_format", "CAN ID Type", 32, {"Extended", "Standard"}, 0x80000000)
 can_frame_type = ProtoField.bool("busmirroring.can_frame_type", "CAN Frame Type", 32, {"CAN FD", "CAN 2.0"}, 0x40000000)
@@ -30,7 +40,8 @@ payload = ProtoField.bytes("busmirroring.payload", "Payload")
 busmirroring_protocol.fields =
     {protocol_version, sequence_number, header_timestamp, seconds, nanoseconds, data_length, -- header
     timestamp, network_state_available, frame_id_available, payload_available, network_type, network_id, network_state,
-     frame_id, can_id_format, can_frame_type, can_id, lin_pid, payload_length, payload -- data
+     frames_lost, bus_online, can_error_passive, can_bus_off, can_tx_error_count, lin_header_tx_error, lin_tx_error,
+     lin_rx_error, lin_rx_no_response, frame_id, can_id_format, can_frame_type, can_id, lin_pid, payload_length, payload -- data
     }
 
 function busmirroring_protocol.dissector(buffer, pinfo, tree)
@@ -40,6 +51,7 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
     end
 
     pinfo.cols.protocol = busmirroring_protocol.name
+    pinfo.cols.info = "BusMirroring Seq=" .. buffer(1, 1):uint() .. " Len=" .. buffer(12, 2):uint()
 
     local subtree = tree:add(busmirroring_protocol, buffer(), "Bus Mirroring Protocol")
     subtree:add(protocol_version, buffer(0, 1))
@@ -89,7 +101,19 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
         data_tree:add(network_id, buffer(offset + 3, 1))
         local local_offset = 4
         if has_network_state then
-            data_tree:add(network_stat, buffer(offset + local_offset, 1))
+            local ns_tree = data_tree:add(network_state, buffer(offset + local_offset, 1))
+            ns_tree:add(frames_lost, buffer(offset + local_offset, 1))
+            ns_tree:add(bus_online, buffer(offset + local_offset, 1))
+            if type == 0x01 then -- CAN
+                ns_tree:add(can_error_passive, buffer(offset + local_offset, 1))
+                ns_tree:add(can_bus_off, buffer(offset + local_offset, 1))
+                ns_tree:add(can_tx_error_count, buffer(offset + local_offset, 1))
+            elseif type == 0x02 then -- LIN
+                ns_tree:add(lin_header_tx_error, buffer(offset + local_offset, 1))
+                ns_tree:add(lin_tx_error, buffer(offset + local_offset, 1))
+                ns_tree:add(lin_rx_error, buffer(offset + local_offset, 1))
+                ns_tree:add(lin_rx_no_response, buffer(offset + local_offset, 1))
+            end
             local_offset = local_offset + 1
         end
         if has_frame_id then
