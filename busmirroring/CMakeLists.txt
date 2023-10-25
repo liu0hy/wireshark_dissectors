@@ -1,8 +1,8 @@
 # CMakeLists.txt
 #
 # Wireshark - Busmirroring protocol dissector
-# By liu0hy <liu0hy@gmail.com>
-# Copyright 2023 liu0hy
+# By Haiyun Liu <liu0hy@gmail.com>
+# Copyright 2023 Haiyun Liu
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
