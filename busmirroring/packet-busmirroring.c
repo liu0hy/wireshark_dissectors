@@ -1,8 +1,6 @@
 #include "config.h"
 #include <epan/packet.h>
 
-#define BUSMIRRORING_PORT 30511
-
 enum network_type
 {
     NETWORK_TYPE_UNKNOWN = 0x00,
@@ -378,5 +376,5 @@ void proto_reg_handoff_busmirroring(void)
     static dissector_handle_t busmirroring_handle;
 
     busmirroring_handle = create_dissector_handle(dissect_busmirroring, proto_busmirroring);
-    dissector_add_uint("udp.port", BUSMIRRORING_PORT, busmirroring_handle);
+    dissector_add_for_decode_as("udp.port", busmirroring_handle);
 }

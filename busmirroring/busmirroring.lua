@@ -142,4 +142,4 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
 end
 
 local udp_port = DissectorTable.get("udp.port")
-udp_port:add(30511, busmirroring_protocol)
+udp_port:add_for_decode_as(busmirroring_protocol)
