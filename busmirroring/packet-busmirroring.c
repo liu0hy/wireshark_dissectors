@@ -1,3 +1,13 @@
+/* packet-busmirroring.c
+ * Routines for BusMirroring protocol packet disassembly
+ *
+ * Wireshark - Network traffic analyzer
+ * By Gerald Combs <gerald@wireshark.org>
+ * Copyright 1998 Gerald Combs
+ *
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
 #include "config.h"
 #include <epan/packet.h>
 
@@ -51,8 +61,9 @@ static int ett_frame_id = -1;
 static int
 dissect_busmirroring(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void *data _U_)
 {
+    static const int header_size = 14;
     int buffer_length = tvb_captured_length(tvb);
-    if (0 == buffer_length)
+    if (buffer_length < header_size)
     {
         return 0;
     }
@@ -73,17 +84,17 @@ dissect_busmirroring(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, vo
     proto_tree_add_item(ht_tree, hf_nanoseconds, tvb, 8, 4, ENC_BIG_ENDIAN);
     proto_tree_add_item(busmirroring_tree, hf_data_length, tvb, 12, 2, ENC_BIG_ENDIAN);
 
-    int index = 0;
-    int offset = 14;
+    int data_item_index = 0;
+    int offset = header_size;
     while (offset < buffer_length)
     {
-        int data_length = 4;
+        int data_item_length = 4; // The data header should be at least 4 bytes long
         uint8_t flags = tvb_get_guint8(tvb, offset + 2);
         uint8_t type = flags & 0x1F;
         uint8_t has_network_state = flags & 0x80;
         if (has_network_state)
         {
-            data_length += 1;
+            data_item_length += 1;
         }
         uint8_t has_frame_id = flags & 0x40;
         if (has_frame_id)
@@ -103,19 +114,19 @@ dissect_busmirroring(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, vo
             default:
                 break;
             }
-            data_length += frame_id_length;
+            data_item_length += frame_id_length;
         }
         uint8_t has_payload = flags & 0x20;
         int length = 0;
         if (has_payload)
         {
-            length = tvb_get_guint8(tvb, offset + data_length);
-            data_length += 1;
-            data_length += length;
+            length = tvb_get_guint8(tvb, offset + data_item_length);
+            data_item_length += 1; // "Payload length" field is 1 byte long
+            data_item_length += length;
         }
 
-        proto_item *data_item = proto_tree_add_item(busmirroring_tree, proto_busmirroring, tvb, offset, data_length, ENC_NA);
-        proto_item_set_text(data_item, "Data Item #%d", index);
+        proto_item *data_item = proto_tree_add_item(busmirroring_tree, proto_busmirroring, tvb, offset, data_item_length, ENC_NA);
+        proto_item_set_text(data_item, "Data Item #%d", data_item_index);
         proto_tree *data_tree = proto_item_add_subtree(data_item, ett_data_item);
         proto_tree_add_item(data_tree, hf_timestamp, tvb, offset, 2, ENC_BIG_ENDIAN);
         proto_tree_add_item(data_tree, hf_network_state_available, tvb, offset + 2, 1, ENC_BIG_ENDIAN);
@@ -188,11 +199,11 @@ dissect_busmirroring(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, vo
         if (has_payload)
         {
             proto_tree_add_item(data_item, hf_payload_length, tvb, offset + local_offset, 1, ENC_BIG_ENDIAN);
-            proto_tree_add_item(data_item, hf_payload, tvb, offset + local_offset + 1, length, ENC_BIG_ENDIAN);
+            proto_tree_add_item(data_item, hf_payload, tvb, offset + local_offset + 1, length, ENC_NA);
         }
 
-        ++index;
-        offset += data_length;
+        ++data_item_index;
+        offset += data_item_length;
     } // while
 
     return buffer_length;
@@ -200,14 +211,14 @@ dissect_busmirroring(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, vo
 
 void proto_register_busmirroring(void)
 {
-    static const true_false_string availability_text = {"Available", "Not Available"};
     static const true_false_string can_id_type_names = {"Extended", "Standard"};
     static const true_false_string can_frame_type_names = {"CAN FD", "CAN 2.0"};
     static const value_string network_type_names[] = {
         {1, "CAN"},
         {2, "LIN"},
         {3, "FlexRay"},
-        {4, "Ethernet"}};
+        {4, "Ethernet"},
+        {0, NULL} };
     static hf_register_info hf[] = {
         {&hf_protocol_version,
          {"Protocol Version", "busmirroring.protocol_version",
@@ -247,17 +258,17 @@ void proto_register_busmirroring(void)
         {&hf_network_state_available,
          {"Network State", "busmirroring.network_state_available",
           FT_BOOLEAN, 8,
-          TFS(&availability_text), 0x80,
+          TFS(&tfs_available_not_available), 0x80,
           NULL, HFILL}},
         {&hf_frame_id_available,
          {"Frame ID", "busmirroring.frame_id_available",
           FT_BOOLEAN, 8,
-          TFS(&availability_text), 0x40,
+          TFS(&tfs_available_not_available), 0x40,
           NULL, HFILL}},
         {&hf_payload_available,
          {"Payload", "busmirroring.payload_available",
           FT_BOOLEAN, 8,
-          TFS(&availability_text), 0x20,
+          TFS(&tfs_available_not_available), 0x20,
           NULL, HFILL}},
         {&hf_network_type,
          {"Network Type", "busmirroring.network_type",
@@ -381,3 +392,16 @@ void proto_reg_handoff_busmirroring(void)
     dissector_add_uint_with_preference("udp.port", BUSMIRRORING_UDP_PORT, busmirroring_handle);
     dissector_add_for_decode_as("udp.port", busmirroring_handle);
 }
+
+/*
+ * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
+ *
+ * Local Variables:
+ * c-basic-offset: 2
+ * tab-width: 8
+ * indent-tabs-mode: nil
+ * End:
+ *
+ * ex: set shiftwidth=2 tabstop=8 expandtab:
+ * :indentSize=2:tabSize=8:noTabs=true:
+ */

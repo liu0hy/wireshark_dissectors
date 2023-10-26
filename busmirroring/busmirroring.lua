@@ -46,7 +46,7 @@ busmirroring_protocol.fields =
 
 function busmirroring_protocol.dissector(buffer, pinfo, tree)
     local buffer_length = buffer:len()
-    if buffer_length == 0 then
+    if buffer_length < 14 then -- Header size is 14 bytes
         return
     end
 
@@ -62,15 +62,15 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
     header_timestamp_tree:add(nanoseconds, buffer(8, 4))
     subtree:add(data_length, buffer(12, 2))
 
-    local index = 0
+    local data_item_index = 0
     local offset = 14
     while offset < buffer_length do
-        local data_length = 4
+        local data_item_length = 4
         local flags = buffer:range(offset + 2, 1):uint()
         local type = bit32.band(flags, 0x1F)
         local has_network_state = bit32.btest(flags, 0x80)
         if has_network_state then
-            data_length = data_length + 1
+            data_item_length = data_item_length + 1
         end
         local has_frame_id = bit32.btest(flags, 0x40)
         if has_frame_id then
@@ -82,17 +82,17 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
             elseif type == 0x03 then -- FlexRay
                 frame_id_length = 3
             end
-            data_length = data_length + frame_id_length
+            data_item_length = data_item_length + frame_id_length
         end
         local has_payload = bit32.btest(flags, 0x20)
         local length = 0
         if has_payload then
-            length = buffer:range(offset + data_length, 1):uint()
-            data_length = data_length + 1
-            data_length = data_length + length
+            length = buffer:range(offset + data_item_length, 1):uint()
+            data_item_length = data_item_length + 1
+            data_item_length = data_item_length + length
         end
 
-        local data_tree = subtree:add(busmirroring_protocol, buffer(offset, data_length), "Data Item #" .. index)
+        local data_tree = subtree:add(busmirroring_protocol, buffer(offset, data_item_length), "Data Item #" .. data_item_index)
         data_tree:add(timestamp, buffer(offset, 2))
         data_tree:add(network_state_available, buffer(offset + 2, 1))
         data_tree:add(frame_id_available, buffer(offset + 2, 1))
@@ -136,8 +136,8 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
             data_tree:add(payload_length, buffer(offset + local_offset, 1))
             data_tree:add(payload, buffer(offset + local_offset + 1, length))
         end
-        index = index + 1
-        offset = offset + data_length
+        data_item_index = data_item_index + 1
+        offset = offset + data_item_length
     end
 end
 
