@@ -44,6 +44,13 @@ busmirroring_protocol.fields =
      lin_rx_error, lin_rx_no_response, frame_id, can_id_format, can_frame_type, can_id, lin_pid, payload_length, payload -- data
     }
 
+busmirroring_protocol.prefs.udp_ports = Pref.range("UDP port(s)", 30511, "Bus Mirroring UDP port(s)", 65535)
+
+function busmirroring_protocol.prefs_changed()
+    local udp_port = DissectorTable.get("udp.port")
+    udp_port:set(busmirroring_protocol.prefs.udp_ports, busmirroring_protocol)
+end
+
 function busmirroring_protocol.dissector(buffer, pinfo, tree)
     local buffer_length = buffer:len()
     if buffer_length < 14 then -- Header size is 14 bytes
@@ -143,3 +150,4 @@ end
 
 local udp_port = DissectorTable.get("udp.port")
 udp_port:add_for_decode_as(busmirroring_protocol)
+udp_port:add(30511, busmirroring_protocol)
