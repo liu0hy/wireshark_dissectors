@@ -71,7 +71,7 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
 
     local data_item_index = 0
     local offset = 14
-    while offset < buffer_length do
+    while offset + 4 <= buffer_length do
         local data_item_length = 4
         local flags = buffer:range(offset + 2, 1):uint()
         local type = bit32.band(flags, 0x1F)
@@ -99,6 +99,10 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
             data_item_length = data_item_length + length
         end
 
+        if offset + data_item_length > buffer_length then
+            return
+        end
+
         local data_tree = subtree:add(busmirroring_protocol, buffer(offset, data_item_length), "Data Item #" .. data_item_index)
         data_tree:add(timestamp, buffer(offset, 2))
         data_tree:add(network_state_available, buffer(offset + 2, 1))
@@ -106,45 +110,46 @@ function busmirroring_protocol.dissector(buffer, pinfo, tree)
         data_tree:add(payload_available, buffer(offset + 2, 1))
         data_tree:add(network_type, buffer(offset + 2, 1))
         data_tree:add(network_id, buffer(offset + 3, 1))
-        local local_offset = 4
+        offset = offset + 4
         if has_network_state then
-            local ns_tree = data_tree:add(network_state, buffer(offset + local_offset, 1))
-            ns_tree:add(frames_lost, buffer(offset + local_offset, 1))
-            ns_tree:add(bus_online, buffer(offset + local_offset, 1))
+            local ns_tree = data_tree:add(network_state, buffer(offset, 1))
+            ns_tree:add(frames_lost, buffer(offset, 1))
+            ns_tree:add(bus_online, buffer(offset, 1))
             if type == 0x01 then -- CAN
-                ns_tree:add(can_error_passive, buffer(offset + local_offset, 1))
-                ns_tree:add(can_bus_off, buffer(offset + local_offset, 1))
-                ns_tree:add(can_tx_error_count, buffer(offset + local_offset, 1))
+                ns_tree:add(can_error_passive, buffer(offset, 1))
+                ns_tree:add(can_bus_off, buffer(offset, 1))
+                ns_tree:add(can_tx_error_count, buffer(offset, 1))
             elseif type == 0x02 then -- LIN
-                ns_tree:add(lin_header_tx_error, buffer(offset + local_offset, 1))
-                ns_tree:add(lin_tx_error, buffer(offset + local_offset, 1))
-                ns_tree:add(lin_rx_error, buffer(offset + local_offset, 1))
-                ns_tree:add(lin_rx_no_response, buffer(offset + local_offset, 1))
+                ns_tree:add(lin_header_tx_error, buffer(offset, 1))
+                ns_tree:add(lin_tx_error, buffer(offset, 1))
+                ns_tree:add(lin_rx_error, buffer(offset, 1))
+                ns_tree:add(lin_rx_no_response, buffer(offset, 1))
             end
-            local_offset = local_offset + 1
+            offset = offset + 1
         end
         if has_frame_id then
             if type == 0x01 then -- CAN
-                local frame_id_tree = data_tree:add(frame_id, buffer(offset + local_offset, 4))
-                frame_id_tree:add(can_id_format, buffer(offset + local_offset, 4))
-                frame_id_tree:add(can_frame_type, buffer(offset + local_offset, 4))
-                frame_id_tree:add(can_id, buffer(offset + local_offset, 4))
-                local_offset = local_offset + 4
+                local frame_id_tree = data_tree:add(frame_id, buffer(offset, 4))
+                frame_id_tree:add(can_id_format, buffer(offset, 4))
+                frame_id_tree:add(can_frame_type, buffer(offset, 4))
+                frame_id_tree:add(can_id, buffer(offset, 4))
+                offset = offset + 4
             elseif type == 0x02 then -- LIN
-                local frame_id_tree = data_tree:add(frame_id, buffer(offset + local_offset, 1))
-                frame_id_tree:add(lin_pid, buffer(offset + local_offset, 1))
-                local_offset = local_offset + 1
+                local frame_id_tree = data_tree:add(frame_id, buffer(offset, 1))
+                frame_id_tree:add(lin_pid, buffer(offset, 1))
+                offset = offset + 1
             elseif type == 0x03 then -- FlexRay
-                local frame_id_tree = data_tree:add(frame_id, buffer(offset + local_offset, 3))
-                local_offset = local_offset + 3
+                local frame_id_tree = data_tree:add(frame_id, buffer(offset, 3))
+                offset = offset + 3
             end
         end
         if has_payload then
-            data_tree:add(payload_length, buffer(offset + local_offset, 1))
-            data_tree:add(payload, buffer(offset + local_offset + 1, length))
+            data_tree:add(payload_length, buffer(offset, 1))
+            offset = offset + 1
+            data_tree:add(payload, buffer(offset, length))
+            offset = offset + length
         end
         data_item_index = data_item_index + 1
-        offset = offset + data_item_length
     end
 end
 
