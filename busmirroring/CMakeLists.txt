@@ -10,7 +10,7 @@
 include(WiresharkPlugin)
 
 # Plugin name and version info (major minor micro extra)
-set_module_info(busmirroring 0 1 3 0)
+set_module_info(busmirroring 0 1 4 0)
 
 set(DISSECTOR_SRC
 	packet-busmirroring.c
